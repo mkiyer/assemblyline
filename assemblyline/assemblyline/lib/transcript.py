@@ -79,19 +79,19 @@ class Exon(object):
         return (self.start != other.start) or (self.end != other.end)
     def __lt__(self, other):
         return self.start < other.start
-    def __le__(self, other):        
+    def __le__(self, other):
         return self.start <= other.start
     def __gr__(self, other):
         return self.start > other.start
     def __ge__(self, other):
-        return self.start >= other.start        
+        return self.start >= other.start
     def __hash__(self):
         return (self.start << 16) | (self.end)
     def is_overlapping(self, other):
         return interval_overlap(self, other)
-    
+
 class Transcript(object):
-    __slots__ = ('chrom', 'start', 'end', 'strand', 'score', 'exons', 'attrs') 
+    __slots__ = ('chrom', 'start', 'end', 'strand', 'score', 'exons', 'attrs')
 
     def __init__(self):
         self.chrom = None
@@ -105,10 +105,10 @@ class Transcript(object):
     def __str__(self):
         return ("<%s(chrom='%s', start='%d', end='%d', strand='%s', "
                 "score='%s' exons='%s', attrs='%s'" %
-                (self.__class__.__name__, self.chrom, self.start, self.end, 
-                 strand_int_to_str(self.strand), str(self.score), self.exons, 
+                (self.__class__.__name__, self.chrom, self.start, self.end,
+                 strand_int_to_str(self.strand), str(self.score), self.exons,
                  self.attrs))
-        
+
     @property
     def length(self):
         return sum((e.end - e.start) for e in self.exons)
@@ -123,7 +123,7 @@ class Transcript(object):
             e2 = self.exons[j]
             yield e1.end, e2.start
             e1 = e2
-    
+
     def introns(self):
         return list(self.iterintrons())
 
@@ -132,10 +132,10 @@ class Transcript(object):
         block_starts = []
         for e0, e1 in self.exons:
             block_starts.append(e0 - self.tx_start)
-            block_sizes.append(e1 - e0)        
+            block_sizes.append(e1 - e0)
         # write
-        s = '\t'.join([self.chrom, 
-                       str(self.start), 
+        s = '\t'.join([self.chrom,
+                       str(self.start),
                        str(self.end),
                        str(self.attrs["transcript_id"]),
                        '0',
@@ -147,7 +147,7 @@ class Transcript(object):
                        ','.join(map(str,block_sizes)) + ',',
                        ','.join(map(str,block_starts)) + ','])
         return s
-    
+
     def to_gtf_features(self, source=None, score=1000):
         if source is None:
             source = 'assemblyline'
@@ -184,15 +184,15 @@ def transcripts_from_gtf_lines(lines, attr_defs=None):
     for line in lines:
         feature = GTFFeature.from_string(line, attr_defs)
         t_id = feature.attrs["transcript_id"]
-        if t_id not in transcripts:            
+        if t_id not in transcripts:
             if feature.feature_type != "transcript":
-                raise GTFError("Feature type '%s' found before 'transcript' record: %s" % 
+                raise GTFError("Feature type '%s' found before 'transcript' record: %s" %
                                (feature.feature_type, str(feature)))
             t = Transcript()
             t.chrom = feature.seqid
             t.start = feature.start
             t.end = feature.end
-            # convert from string strand notation ("+", "-", ".") 
+            # convert from string strand notation ("+", "-", ".")
             # to integer (0, 1)
             t.strand = strand_str_to_int(feature.strand)
             t.exons = []

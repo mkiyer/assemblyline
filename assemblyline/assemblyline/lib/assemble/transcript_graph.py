@@ -37,9 +37,9 @@ def find_exon_boundaries(transcripts):
     '''
     input: a list of transcripts (not Node objects, these are transcripts)
     parsed directly from an input file and not added to an isoform graph
-    yet. 
-    
-    output: sorted list of exon boundaries    
+    yet.
+
+    output: sorted list of exon boundaries
     '''
     exon_boundaries = set()
     # first add introns to the graph and keep track of
@@ -56,7 +56,7 @@ def find_exon_boundaries(transcripts):
 def split_exon(exon, boundaries):
     """
     partition the exon given list of node boundaries
-    
+
     generator yields (start,end) intervals for exon
     """
     if exon.start == exon.end:
@@ -64,7 +64,7 @@ def split_exon(exon, boundaries):
     # find the indexes into the intron boundaries list that
     # border the exon.  all the indexes in between these two
     # are overlapping the exon and we must use them to break
-    # the exon into pieces 
+    # the exon into pieces
     start_ind = bisect.bisect_right(boundaries, exon.start)
     end_ind = bisect.bisect_left(boundaries, exon.end)
     if start_ind == end_ind:
@@ -112,16 +112,16 @@ def resolve_strand(nodes_iter, node_data):
 
 def partition_transcripts_by_strand(transcripts):
     """
-    uses information from stranded transcripts to infer strand for 
+    uses information from stranded transcripts to infer strand for
     unstranded transcripts
     """
     def add_transcript(t, nodes_iter, transcript_lists, node_data):
         for n in nodes_iter:
             node_data[n]['scores'][t.strand] += t.score
-        t_id = t.attrs[GTFAttr.TRANSCRIPT_ID]         
+        t_id = t.attrs[GTFAttr.TRANSCRIPT_ID]
         transcript_lists[t.strand].append(t)
     # divide transcripts into independent regions of
-    # transcription with a single entry and exit point    
+    # transcription with a single entry and exit point
     boundaries = find_exon_boundaries(transcripts)
     node_data_func = lambda: {'ref_strands': [False, False],
                               'scores': [0.0, 0.0, 0.0]}
@@ -137,12 +137,12 @@ def partition_transcripts_by_strand(transcripts):
                 node_data[n]['ref_strands'][t.strand] = True
             strand_ref_transcripts[t.strand].append(t)
         elif t.strand != NO_STRAND:
-            add_transcript(t, split_exons(t, boundaries), 
+            add_transcript(t, split_exons(t, boundaries),
                            strand_transcript_lists, node_data)
         else:
             unresolved_transcripts.append(t)
     # resolve unstranded transcripts
-    logging.debug("\t\t%d unstranded transcripts" % 
+    logging.debug("\t\t%d unstranded transcripts" %
                   (len(unresolved_transcripts)))
     # keep track of remaining unresolved nodes
     unresolved_nodes = set()
@@ -150,7 +150,7 @@ def partition_transcripts_by_strand(transcripts):
         resolved = []
         still_unresolved_transcripts = []
         for t in unresolved_transcripts:
-            nodes = list(split_exons(t,boundaries))            
+            nodes = list(split_exons(t,boundaries))
             t.strand = resolve_strand(nodes, node_data)
             if t.strand != NO_STRAND:
                 resolved.append(t)
@@ -158,11 +158,11 @@ def partition_transcripts_by_strand(transcripts):
                 unresolved_nodes.update(nodes)
                 still_unresolved_transcripts.append(t)
         for t in resolved:
-            add_transcript(t, split_exons(t, boundaries), 
+            add_transcript(t, split_exons(t, boundaries),
                            strand_transcript_lists, node_data)
         unresolved_transcripts = still_unresolved_transcripts
     if len(unresolved_transcripts) > 0:
-        logging.debug("\t\t%d unresolved transcripts" % 
+        logging.debug("\t\t%d unresolved transcripts" %
                       (len(unresolved_transcripts)))
         # if there are still unresolved transcripts then we can try to
         # extrapolate and assign strand to clusters of nodes at once, as
@@ -179,12 +179,12 @@ def partition_transcripts_by_strand(transcripts):
             strand = resolve_strand(nodes, node_data)
             for n in nodes:
                 node_strand_map[n] = strand
-        # for each transcript assign strand to the cluster with 
+        # for each transcript assign strand to the cluster with
         # the best overlap
         unresolved_count = 0
         for t in unresolved_transcripts:
-            strand_bp = [0,0]
-            nodes = list(split_exons(t, boundaries))        
+            strand_bp = [0, 0]
+            nodes = list(split_exons(t, boundaries))
             for n in nodes:
                 strand = node_strand_map[n]
                 if strand != NO_STRAND:
@@ -198,17 +198,17 @@ def partition_transcripts_by_strand(transcripts):
             else:
                 unresolved_count += 1
             add_transcript(t, nodes, strand_transcript_lists, node_data)
-        logging.debug("\t\tCould not resolve %d transcripts" % 
+        logging.debug("\t\tCould not resolve %d transcripts" %
                       (unresolved_count))
-        del cluster_tree    
+        del cluster_tree
     return strand_transcript_lists, strand_ref_transcripts
 
 def create_directed_graph(strand, transcripts):
     '''build strand-specific graph'''
     def add_node_directed(G, n, score):
         """add node to graph"""
-        if n not in G: 
-            G.add_node(n, attr_dict={NODE_LENGTH: (n.end - n.start), 
+        if n not in G:
+            G.add_node(n, attr_dict={NODE_LENGTH: (n.end - n.start),
                                      NODE_SCORE: 0.0})
         nd = G.node[n]
         nd[NODE_SCORE] += score
@@ -220,7 +220,7 @@ def create_directed_graph(strand, transcripts):
     for t in transcripts:
         # split exons that cross boundaries and get the
         # nodes that made up the transcript
-        # TODO: can generate 
+        # TODO: can generate
         nodes = [Exon(start,end) for start,end in split_exons(t, boundaries)]
         if strand == NEG_STRAND:
             nodes.reverse()
@@ -243,22 +243,22 @@ class TranscriptGraph(object):
         self.Gsub = Gsub
         self.partial_paths = None
 
-def create_transcript_graphs(chrom, transcripts, 
-                             min_trim_length=0, 
+def create_transcript_graphs(chrom, transcripts,
+                             min_trim_length=0,
                              trim_utr_fraction=0.0,
                              trim_intron_fraction=0.0,
-                             create_bedgraph=False, 
+                             create_bedgraph=False,
                              bedgraph_filehs=None):
 
     '''
-    generates (graph, strand, transcript_map) tuples with transcript 
+    generates (graph, strand, transcript_map) tuples with transcript
     graphs
     '''
     def get_bedgraph_lines(chrom, G):
         for n in sorted(G.nodes()):
             if n.start < 0:
                 continue
-            fields = (chrom, n.start, n.end, G.node[n][NODE_SCORE]) 
+            fields = (chrom, n.start, n.end, G.node[n][NODE_SCORE])
             yield fields
     # partition transcripts by strand and resolve unstranded transcripts
     logging.debug("\tResolving unstranded transcripts")
@@ -275,9 +275,9 @@ def create_transcript_graphs(chrom, transcripts,
             for fields in get_bedgraph_lines(chrom, G):
                 print >>bedgraph_filehs[strand], '\t'.join(map(str,fields))
         # trim utrs and intron retentions
-        trim_nodes = trim_graph(G, strand, 
-                                min_trim_length, 
-                                trim_utr_fraction, 
+        trim_nodes = trim_graph(G, strand,
+                                min_trim_length,
+                                trim_utr_fraction,
                                 trim_intron_fraction)
         G.remove_nodes_from(trim_nodes)
         # collapse consecutive nodes in graph
@@ -310,16 +310,13 @@ def create_transcript_graphs(chrom, transcripts,
                 subgraph_node_map[subgraph_id].add(cn)
             # add transcript node/score pairs to subgraphs
             for subgraph_id, subgraph_nodes in subgraph_node_map.iteritems():
-                subgraph_nodes = sorted(subgraph_nodes, 
-                                        key=operator.attrgetter('start'), 
+                subgraph_nodes = sorted(subgraph_nodes,
+                                        key=operator.attrgetter('start'),
                                         reverse=(strand == NEG_STRAND))
                 tg = strand_graphs[subgraph_id]
                 tg.partial_paths[tuple(subgraph_nodes)] += t.score
         transcript_graphs.extend(strand_graphs)
-    # convert 
+    # convert
     for tg in transcript_graphs:
         tg.partial_paths = tg.partial_paths.items()
     return transcript_graphs
-
-
-

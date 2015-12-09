@@ -50,7 +50,7 @@ class CompareData(object):
 
 class GlobalStats(object):
     FIELDS = ('introns_both', 'introns_ref_only', 'introns_test_only',
-              'patterns_both', 'patterns_ref_only', 'patterns_test_only', 
+              'patterns_both', 'patterns_ref_only', 'patterns_test_only',
               'cov_both', 'cov_ref_only', 'cov_test_only')
 
     def __init__(self):
@@ -221,8 +221,8 @@ class MatchStats(object):
     @staticmethod
     def header_fields():
         return ['transcript_id', 'gene_id', 'locus', 'length', 'num_introns',
-                'ref_transcript_id', 'ref_gene_id', 'ref_orig_gene_id', 'ref_gene_name', 
-                'ref_source', 'ref_gene_type', 'ref_locus', 
+                'ref_transcript_id', 'ref_gene_id', 'ref_orig_gene_id', 'ref_gene_name',
+                'ref_source', 'ref_gene_type', 'ref_locus',
                 'ref_length', 'ref_num_introns',
                 'shared_same_strand_bp', 'shared_opp_strand_bp',
                 'shared_introns', 'shared_splicing',
@@ -245,8 +245,8 @@ class MatchStats(object):
         return other
 
     def add_gtf_attributes(self, feature):
-        attrs = ['ref_transcript_id', 'ref_gene_id', 'ref_orig_gene_id', 
-                 'ref_gene_name', 'ref_source', 'ref_gene_type', 
+        attrs = ['ref_transcript_id', 'ref_gene_id', 'ref_orig_gene_id',
+                 'ref_gene_name', 'ref_source', 'ref_gene_type',
                  'ref_locus', 'ref_length', 'ref_num_introns',
                  'shared_same_strand_bp', 'shared_opp_strand_bp',
                  'shared_introns', 'shared_splicing',
@@ -254,7 +254,7 @@ class MatchStats(object):
         for attr in attrs:
             v = getattr(self, attr)
             feature.attrs[attr] = v
-    
+
     @staticmethod
     def from_transcript(t, ref=None):
         self = MatchStats()
@@ -269,8 +269,8 @@ class MatchStats(object):
             self.ref_locus = '%s:%d-%d[%s]' % (ref.chrom, ref.start, ref.end, strand_int_to_str(ref.strand))
             self.ref_length = ref.length
             self.ref_num_introns = len(ref.exons) - 1
-            self.ref_orig_gene_id = ref.attrs.get('orig_gene_id', self.ref_gene_id)            
-            self.ref_source = ref.attrs.get('source', 'NA')            
+            self.ref_orig_gene_id = ref.attrs.get('orig_gene_id', self.ref_gene_id)
+            self.ref_source = ref.attrs.get('source', 'NA')
             if 'gene_name' in ref.attrs:
                 self.ref_gene_name = ref.attrs['gene_name']
             elif 'transcript_name' in ref.attrs:
@@ -279,7 +279,7 @@ class MatchStats(object):
                 self.ref_gene_name = self.ref_gene_id
             if 'gene_type' in ref.attrs:
                 self.ref_gene_type = ref.attrs['gene_type']
-            elif 'gene_biotype' in ref.attrs:                
+            elif 'gene_biotype' in ref.attrs:
                 self.ref_gene_type = ref.attrs['gene_biotype']
             elif 'transcript_type' in ref.attrs:
                 self.ref_gene_type = ref.attrs['transcript_type']
@@ -299,15 +299,15 @@ class MatchStats(object):
             same_strand_frac = float(m.shared_same_strand_bp) / (m.length + m.ref_length - m.shared_same_strand_bp)
             opp_strand_frac = float(m.shared_opp_strand_bp) / (m.length + m.ref_length - m.shared_opp_strand_bp)
             category_int = Category.to_int(m.category)
-            hits.append((int(m.shared_splicing), intron_frac, 
-                         same_strand_frac, opp_strand_frac, 
+            hits.append((int(m.shared_splicing), intron_frac,
+                         same_strand_frac, opp_strand_frac,
                          int(category_int == Category.INTRONIC_SAME_STRAND),
-                         int(category_int == Category.INTRONIC_OPP_STRAND),                                 
+                         int(category_int == Category.INTRONIC_OPP_STRAND),
                          int(category_int == Category.INTERLEAVING_SAME_STRAND),
                          int(category_int == Category.INTERLEAVING_OPP_STRAND),
                          int(category_int == Category.ENCOMPASSING_SAME_STRAND),
-                         int(category_int == Category.ENCOMPASSING_OPP_STRAND),                                                         
-                         int(category_int == Category.INTERGENIC),                                                         
+                         int(category_int == Category.ENCOMPASSING_OPP_STRAND),
+                         int(category_int == Category.INTERGENIC),
                          -abs(m.distance), m))
         # sort matches
         hits.sort(reverse=True)
@@ -326,12 +326,12 @@ class MatchStats(object):
         reverse = any(x == '-' for x in strands)
         poslst.sort(key=operator.itemgetter(0,1,2), reverse=reverse)
         return [x[3] for x in poslst]
-    
+
     @staticmethod
     def consensus(lst):
         if len(lst) == 0:
             return None
-        # first check for read through transcripts involving multiple 
+        # first check for read through transcripts involving multiple
         # reference genes
         same_strand_hits = collections.defaultdict(lambda: [])
         for m in lst:
@@ -350,7 +350,7 @@ class MatchStats(object):
         hits = []
         for genelst in same_strand_hits.itervalues():
             m = MatchStats.choose_best(genelst).copy()
-            m.ref_gene_type = ','.join(sorted(set(m.ref_gene_type for m in genelst)))           
+            m.ref_gene_type = ','.join(sorted(set(m.ref_gene_type for m in genelst)))
             total_introns += m.ref_num_introns
             total_length += m.ref_length
             shared_introns += m.shared_introns
@@ -377,11 +377,11 @@ class MatchStats(object):
         if len(same_strand_hits) > 1:
             hit.category = Category.to_str(Category.READ_THROUGH)
         return hit
-        
+
 
 def compare_locus(transcripts):
     # store reference introns
-    # (strand,start,end) -> ids (set) 
+    # (strand,start,end) -> ids (set)
     ref_intron_dict = collections.defaultdict(lambda: [])
     ref_node_dict = collections.defaultdict(lambda: [])
     ref_splicing_patterns = collections.defaultdict(lambda: [])
@@ -444,10 +444,10 @@ def compare_locus(transcripts):
                     c = Category.INTRONIC_SAME_STRAND
                 else:
                     c = Category.INTRONIC_OPP_STRAND
-                for ref in hit.value: 
+                for ref in hit.value:
                     ref_id = ref.attrs[GTFAttr.TRANSCRIPT_ID]
                     m = matches[ref_id]
-                    m.nodes[c].append(n)          
+                    m.nodes[c].append(n)
         # dict of introns -> list of reference transcripts
         for intron in introns:
             if intron in ref_intron_dict:
@@ -506,16 +506,16 @@ def compare_locus(transcripts):
             ms.shared_opp_strand_bp = opp_strand_bp
             ms.shared_introns = num_shared_introns
             ms.shared_splicing = m.splicing
-            ms.category = Category.to_str(c)            
+            ms.category = Category.to_str(c)
             ms.distance = 0
             match_stats.append(ms)
         yield (t, match_stats)
 
 def build_locus_trees(gtf_file):
     transcripts = []
-    locus_cluster_trees = collections.defaultdict(lambda: ClusterTree(0,1))    
+    locus_cluster_trees = collections.defaultdict(lambda: ClusterTree(0,1))
     for locus_transcripts in parse_gtf(open(gtf_file)):
-        for t in locus_transcripts: 
+        for t in locus_transcripts:
             is_ref = bool(int(t.attrs[GTFAttr.REF]))
             if not is_ref:
                 continue
@@ -543,7 +543,7 @@ def find_nearest_transcripts(chrom, start, end, strand, locus_trees):
                 c = Category.ENCOMPASSING_OPP_STRAND
             nearest_features.append((t, c, 0))
     # look left and right
-    left_hits = locus_trees[chrom].before(start, num_intervals=1, max_dist=MAX_LOCUS_DIST)        
+    left_hits = locus_trees[chrom].before(start, num_intervals=1, max_dist=MAX_LOCUS_DIST)
     right_hits = locus_trees[chrom].after(end, num_intervals=1, max_dist=MAX_LOCUS_DIST)
     # look for nearest hit
     for hits in (left_hits, right_hits):
@@ -558,7 +558,7 @@ def find_nearest_transcripts(chrom, start, end, strand, locus_trees):
             for t in nearest_locus_hit.value:
                 dist = min(abs(start - t.end), abs(t.start - end))
                 nearest_features.append((t, Category.INTERGENIC, dist))
-    return nearest_features    
+    return nearest_features
 
 def _parse_gtf_by_chrom(gtf_file):
     current_chrom = None
@@ -610,7 +610,7 @@ def add_gtf_file(gtf_file, outfh, is_ref):
             f.attrs[GTFAttr.REF] = refval
             print >>outfh, str(f)
 
-def compare_assemblies(ref_gtf_file, test_gtf_file, output_dir): 
+def compare_assemblies(ref_gtf_file, test_gtf_file, output_dir):
     # output files
     if not os.path.exists(output_dir):
         logging.info('Creating output dir: %s' % (output_dir))
@@ -630,10 +630,10 @@ def compare_assemblies(ref_gtf_file, test_gtf_file, output_dir):
             logging.info("Adding test GTF file")
             add_gtf_file(test_gtf_file, fileh, is_ref=False)
         open(merge_done_file, 'w').close()
-    if not os.path.exists(sort_done_file):        
+    if not os.path.exists(sort_done_file):
         logging.info("Sorting merged GTF file")
         # create temp directory
-        tmp_dir = os.path.join(output_dir, 'tmp')    
+        tmp_dir = os.path.join(output_dir, 'tmp')
         if not os.path.exists(tmp_dir):
             logging.debug("Creating tmp directory '%s'" % (tmp_dir))
             os.makedirs(tmp_dir)
@@ -660,8 +660,8 @@ def compare_assemblies(ref_gtf_file, test_gtf_file, output_dir):
             locus_chrom = locus_transcripts[0].chrom
             locus_start = locus_transcripts[0].start
             locus_end = max(t.end for t in locus_transcripts)
-            logging.debug("[LOCUS] %s:%d-%d %d transcripts" % 
-                          (locus_chrom, locus_start, locus_end, 
+            logging.debug("[LOCUS] %s:%d-%d %d transcripts" %
+                          (locus_chrom, locus_start, locus_end,
                            len(locus_transcripts)))
             for t, match_stats in compare_locus(locus_transcripts):
                 if len(match_stats) == 0:
@@ -672,7 +672,7 @@ def compare_assemblies(ref_gtf_file, test_gtf_file, output_dir):
                     num_intergenic += 1
                 else:
                     # get consensus match information
-                    consensus_match = MatchStats.consensus(match_stats)                    
+                    consensus_match = MatchStats.consensus(match_stats)
                     assert consensus_match is not None
                     t.attrs['category'] = consensus_match.category
                     # add gtf attributes and write
@@ -716,7 +716,7 @@ def compare_assemblies(ref_gtf_file, test_gtf_file, output_dir):
                     best_match.category = Category.to_str(Category.INTERGENIC)
                     match_stats.append(best_match)
                 else:
-                    for ref,category,dist in nearest_transcripts: 
+                    for ref,category,dist in nearest_transcripts:
                         # create a match object
                         ms = MatchStats.from_transcript(t, ref)
                         ms.shared_same_strand_bp = 0
@@ -774,9 +774,9 @@ def compare_assemblies(ref_gtf_file, test_gtf_file, output_dir):
 def main():
     # parse command line
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbose", action="store_true", 
+    parser.add_argument("-v", "--verbose", action="store_true",
                         dest="verbose", default=False)
-    parser.add_argument("-o", "--output-dir", dest="output_dir", 
+    parser.add_argument("-o", "--output-dir", dest="output_dir",
                         default="compare")
     parser.add_argument("ref_gtf_file")
     parser.add_argument("test_gtf_file")
@@ -797,14 +797,14 @@ def main():
         logging.debug("Creating output directory '%s'" % (args.output_dir))
         os.makedirs(args.output_dir)
     logging.info("AssemblyLine %s" % (assemblyline.__version__))
-    logging.info("----------------------------------")   
+    logging.info("----------------------------------")
     # show parameters
     logging.info("Parameters:")
     logging.info("verbose logging:       %s" % (args.verbose))
     logging.info("reference gtf file:    %s" % (args.ref_gtf_file))
     logging.info("test gtf file:         %s" % (args.test_gtf_file))
     logging.info("output dir:            %s" % (args.output_dir))
-    compare_assemblies(args.ref_gtf_file, args.test_gtf_file, 
+    compare_assemblies(args.ref_gtf_file, args.test_gtf_file,
                        args.output_dir)
     return 0
 

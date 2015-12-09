@@ -59,11 +59,13 @@ DAMAGE.
 """
 import numpy as np
 
+
 def _interpolate(a, b, fraction):
     """Returns the point at the given fraction between a and b, where
     'fraction' must be between 0 and 1.
     """
-    return a + (b - a)*fraction;
+    return a + (b - a) * fraction
+
 
 def scoreatpercentile(a, per, limit=(), interpolation_method='fraction'):
     """
@@ -121,7 +123,7 @@ def scoreatpercentile(a, per, limit=(), interpolation_method='fraction'):
     values = np.sort(a, axis=0)
     if limit:
         values = values[(limit[0] <= values) & (values <= limit[1])]
-    idx = per /100. * (values.shape[0] - 1)
+    idx = per / 100. * (values.shape[0] - 1)
     if (idx % 1 == 0):
         score = values[idx]
     else:
@@ -133,9 +135,10 @@ def scoreatpercentile(a, per, limit=(), interpolation_method='fraction'):
         elif interpolation_method == 'higher':
             score = values[np.ceil(idx)]
         else:
-            raise ValueError("interpolation_method can only be 'fraction', " \
+            raise ValueError("interpolation_method can only be 'fraction', "
                              "'lower' or 'higher'")
     return score
+
 
 def _conf_set(F, alpha=.05):
     """
@@ -164,14 +167,15 @@ def _conf_set(F, alpha=.05):
     upper = np.clip(F + epsilon, 0, 1)
     return lower, upper
 
+
 class StepFunction(object):
     """
     A basic step function.
-    
+
     Values at the ends are handled in the simplest way possible:
     everything to the left of x[0] is set to ival; everything
     to the right of x[-1] is set to y[-1].
-    
+
     Parameters
     ----------
     x : array-like
@@ -184,7 +188,7 @@ class StepFunction(object):
     side : {'left', 'right'}, optional
     Default is 'left'. Defines the shape of the intervals constituting the
     steps. 'right' correspond to [a, b) intervals and 'left' to (a, b].
-    
+
     Examples
     --------
     >>> import numpy as np
@@ -233,14 +237,14 @@ class StepFunction(object):
         self.n = self.x.shape[0]
 
     def __call__(self, time):
-
         tind = np.searchsorted(self.x, time, self.side) - 1
         return self.y[tind]
+
 
 class ECDF(StepFunction):
     """
     Return the Empirical CDF of an array as a step function.
-    
+
     Parameters
     ----------
     x : array-like
@@ -248,11 +252,11 @@ class ECDF(StepFunction):
     side : {'left', 'right'}, optional
     Default is 'right'. Defines the shape of the intervals constituting the
     steps. 'right' correspond to [a, b) intervals and 'left' to (a, b].
-    
+
     Returns
     -------
     Empirical CDF as a step function.
-    
+
     Examples
     --------
     >>> import numpy as np
