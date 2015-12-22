@@ -151,7 +151,7 @@ class GTF:
                 interval = (seqid, start, end)
                 if not window_overlap(interval, window_range):
                     # yield current window
-                    yield window
+                    yield window_range, window
                     # reset window
                     window = [line]
                     window_range = (seqid, start, end)
@@ -168,4 +168,4 @@ class GTF:
 
         # yield last window
         if len(window) > 0:
-            yield window
+            yield window_range, window

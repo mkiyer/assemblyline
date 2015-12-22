@@ -5,6 +5,7 @@ Copyright (C) 2012-2015 Matthew Iyer
 @author: mkiyer
 '''
 import collections
+import operator
 
 from stat import scoreatpercentile
 from gtf import GTF
@@ -35,9 +36,7 @@ def _read_transfrags(sample, gtf_expr_attr, is_ref=False):
     '''
     t_dict = collections.OrderedDict()
     t_id_map = {}
-    g_id_map = {}
     cur_t_id = 1
-    cur_g_id = 1
     expr_tot = 0.0
     for f in GTF.parse(open(sample.gtf_file)):
         if f.feature != 'exon':
@@ -52,17 +51,8 @@ def _read_transfrags(sample, gtf_expr_attr, is_ref=False):
             expr_tot += float(expr)  # update total expression
         else:
             new_t_id = t_id_map[t_id]
-        # rename gene id
-        g_id = f.attrs[GTF.Attr.GENE_ID]
-        if g_id not in g_id_map:
-            new_g_id = "%s.G%d" % (sample._id, cur_g_id)
-            g_id_map[g_id] = new_g_id
-            cur_g_id += 1
-        else:
-            new_g_id = g_id_map[g_id]
         # update feature attributes
         attrs = ((GTF.Attr.TRANSCRIPT_ID, new_t_id),
-                 (GTF.Attr.GENE_ID, new_g_id),
                  (GTF.Attr.SAMPLE_ID, sample._id),
                  (GTF.Attr.REF, str(int(is_ref))),
                  (gtf_expr_attr, expr))
@@ -87,8 +77,11 @@ def add_sample_gtf(sample, gtf_expr_attr, output_fileh, stats_fileh,
     exprs = []
     lengths = []
     for t_id, features in t_dict.iteritems():
+        # sort features (exons) by start position
+        features.sort(key=operator.attrgetter('start'))
+
         expr = float(features[0].attrs[gtf_expr_attr])
-        expr_norm = expr * (1.0e6 / expr_tot)
+        expr_norm = 0.0 if is_ref else expr * (1.0e6 / expr_tot)
         exprs.append(expr_norm)
         lengths.append(sum((f.end - f.start) for f in features))
         # write transcript

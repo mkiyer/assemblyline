@@ -70,9 +70,8 @@ def split_exons(t, boundaries):
 
 
 class Transfrag(object):
-    __slots__ = ('chrom', 'start', 'end', 'strand', 'exons', 'attrs')
-
-    ATTRS = ['_id', 'sample_id', 'expr', 'is_ref']
+    __slots__ = ('chrom', 'start', 'end', 'strand', '_id', 'sample_id',
+                 'expr', 'is_ref', 'exons')
 
     def __init__(self, chrom, start, end, strand, _id, sample_id, expr,
                  is_ref, exons=None):
@@ -96,7 +95,7 @@ class Transfrag(object):
         return Transfrag(f.seqid, f.start, f.end, f.strand,
                          f.attrs[GTF.Attr.TRANSCRIPT_ID],
                          f.attrs[GTF.Attr.SAMPLE_ID],
-                         f.attrs[GTF.Attr.EXPRESSION],
+                         float(f.attrs[GTF.Attr.EXPRESSION]),
                          bool(int(f.attrs[GTF.Attr.REF])))
 
     @staticmethod
@@ -107,24 +106,25 @@ class Transfrag(object):
         t_dict = collections.OrderedDict()
         for gtf_line in gtf_lines:
             f = GTF.Feature.from_str(gtf_line)
-            t_id = t_dict[f.attrs[GTF.Attr.TRANSCRIPT_ID]]
+            t_id = f.attrs[GTF.Attr.TRANSCRIPT_ID]
             is_ref = bool(int(f.attrs[GTF.Attr.REF]))
 
             if is_ref and ignore_ref:
                 continue
 
-            if f.feature != 'transcript':
+            if f.feature == 'transcript':
                 if t_id in t_dict:
                     raise GTFError("Transcript '%s' duplicate detected" % t_id)
-                else:
-                    t = Transfrag.from_gtf(f)
-                    t_dict[t_id] = t
+                t = Transfrag.from_gtf(f)
+                t_dict[t_id] = t
             elif f.feature == 'exon':
                 if t_id not in t_dict:
-                    raise GTFError("Transcript '%s' has exon")
-                else:
-                    t = t_dict[t_id]
-                    t.exons.append(Exon(f.start, f.end))
+                    logging.error('Feature: "%s"' % str(f))
+                    raise GTFError("Transcript '%s' exon feature appeared in "
+                                   "gtf file prior to transcript feature" %
+                                   t_id)
+                t = t_dict[t_id]
+                t.exons.append(Exon(f.start, f.end))
         return t_dict
 
 
@@ -167,6 +167,7 @@ class Locus(object):
                 raise AssemblyError('Locus.create: transfrag chromosomes do '
                                     'not match')
             self._add_transfrag(t)
+            self.strand_transfrags[t.strand].append(t)
         return self
 
     def _add_transfrag(self, t):
@@ -174,9 +175,8 @@ class Locus(object):
             nd = self.node_data[n]
             nd.strands[t.strand] = True
             if not t.is_ref:
-                nd.expr[t.strand] += t.expr
-                nd.sample[t.strand].add(t.sample_id)
-                self.strand_transfrags[t.strand].append(t)
+                nd.exprs[t.strand] += t.expr
+                nd.samples[t.strand].add(t.sample_id)
 
     def _remove_transfrag(self, t):
         for n in split_exons(t, self.boundaries):
@@ -184,8 +184,6 @@ class Locus(object):
             nd.strands[t.strand] = False
             nd.samples[t.strand].remove(t.sample_id)
             nd.exprs[t.strand] -= t.expr
-        # TODO: cannot remove from strand_transfrags list
-        # implement as dictionary?
 
     def _predict_strand(self, nodes):
         total_length = sum((n[1]-n[0]) for n in nodes)
@@ -222,11 +220,10 @@ class Locus(object):
         return '.'
 
     def predict_unknown_strands(self):
-        logging.debug("predict_unknown_strands: %d unstranded transfrags" %
-                      (len(self.strand_transfrags['.'])))
         # iteratively predict strand until no new transfrags can be
         # predicted
-        iterations = 1
+        iterations = 0
+        num_resolved = 0
         while(len(self.strand_transfrags['.']) > 0):
             resolved = []
             unresolved = []
@@ -235,6 +232,7 @@ class Locus(object):
                 new_strand = self._predict_strand(nodes)
                 if new_strand != '.':
                     resolved.append((t, new_strand))
+                    num_resolved += 1
                 else:
                     unresolved.append(t)
             # break when no new transfrags could have strand predicted
@@ -246,44 +244,55 @@ class Locus(object):
                 self._remove_transfrag(t)
                 t.strand = new_strand
                 self._add_transfrag(t)
+                self.strand_transfrags[t.strand].append(t)
             self.strand_transfrags['.'] = unresolved
             iterations += 1
-        logging.debug('predict_unknown_strands: %d iterations' % iterations)
 
-    def get_bedgraph(self, attr='expression'):
+        if iterations > 0:
+            logging.debug('predict_unknown_strands: %d iterations' %
+                          iterations)
+        return num_resolved
+
+    @staticmethod
+    def open_bedgraph(file_prefix):
+        attrs = ('expression', 'recurrence')
+        strand_names = {'+': 'pos', '-': 'neg', '.': 'none'}
+        filehs = {}
+        for a in attrs:
+            filehs[a] = {}
+            for s in ('+', '-', '.'):
+                filename = '%s.%s.%s.bedgraph' % (file_prefix, a,
+                                                  strand_names[s])
+                filehs[a][s] = open(filename, 'w')
+        return filehs
+
+    @staticmethod
+    def close_bedgraph(filehs):
+        for adict in filehs.itervalues():
+            for fileh in adict.itervalues():
+                fileh.close()
+
+    def get_bedgraph_data(self):
         '''
-        Choose from 'expression' or 'recurrence' for 'attr' parameter
+        Returns node attribute data in tuples
+            chrom, start, end, strand, total expression, sample recurrence
         '''
         for n in sorted(self.node_data):
             nd = self.node_data[n]
-            if attr == 'expression':
-                d = nd.exprs
-            elif attr == 'recurrence':
-                d = dict((k, len(v)) for k, v in nd.samples)
-            else:
-                raise AssemblyError('Locus.write_bedgraph: "attr" '
-                                    'unrecognized')
             for strand in ('+', '-', '.'):
-                yield (self.chrom, n[0], n[1], d[strand])
+                yield (self.chrom, n[0], n[1], strand,
+                       nd.exprs[strand], len(nd.samples[strand]))
 
-    def write_bedgraph(self, file_prefix, attr='expression'):
-        strand_names = {'+': 'pos', '-': 'neg', '.': 'none'}
-        if attr not in ('expression', 'recurrence'):
-            raise AssemblyError('"attr" unrecognized')
-        filehs = {}
-        for s in ('+', '-', '.'):
-            filename = '%s.%s.%s.bedgraph' % (file_prefix,
-                                              strand_names[s],
-                                              attr)
-            filehs[s] = open(filename, 'w')
-        for strand, fields in self.get_bedgraph(attr):
-            print >>filehs[strand], '\t'.join(map(str, fields))
-
-
-def assemble_transcriptome(gtf_file, ignore_ref=True):
-    # parse gtf file
-    for gtf_lines in GTF.parse_loci(gtf_file):
-        t_dict = Transfrag.parse_gtf(gtf_lines, ignore_ref)
-        locus = Locus.create(t_dict.itervalues())
-
-        pass
+    def write_bedgraph(self, bgfiledict):
+        '''
+        bgfiledict: dictionary structure containing file handles opened
+                    for writing obtained using Locus.open_bedgraph()
+        '''
+        for tup in self.get_bedgraph_data():
+            chrom, start, end, strand, expr, recur = tup
+            if expr > 0:
+                line = '\t'.join(map(str, [chrom, start, end, expr]))
+                print >>bgfiledict['expression'][strand], line
+            if recur > 0:
+                line = '\t'.join(map(str, [chrom, start, end, recur]))
+                print >>bgfiledict['recurrence'][strand], line

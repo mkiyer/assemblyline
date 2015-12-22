@@ -53,6 +53,7 @@ def find_exon_boundaries(transcripts):
     # sort the intron boundary positions and add them to interval trees
     return sorted(exon_boundaries)
 
+
 def split_exon(exon, boundaries):
     """
     partition the exon given list of node boundaries
@@ -79,8 +80,9 @@ def split_exons(t, boundaries):
     # split exons that cross boundaries and to get the
     # nodes in the transcript path
     for exon in t.exons:
-        for start,end in split_exon(exon, boundaries):
+        for start, end in split_exon(exon, boundaries):
             yield start, end
+
 
 def resolve_strand(nodes_iter, node_data):
     # find strand with highest score or strand
@@ -109,6 +111,7 @@ def resolve_strand(nodes_iter, node_data):
         else:
             return NEG_STRAND
     return NO_STRAND
+
 
 def partition_transcripts_by_strand(transcripts):
     """
