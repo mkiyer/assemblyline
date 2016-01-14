@@ -565,6 +565,8 @@ def _parse_gtf_by_chrom(gtf_file):
     exon_dict = collections.defaultdict(lambda: [])
     transcript_dict = {}
     for feature in GTFFeature.parse(open(gtf_file)):
+        if (feature.feature_type != "transcript") and (feature.feature_type != "exon"):
+            continue
         if (current_chrom != feature.seqid):
             if len(exon_dict) > 0:
                 yield current_chrom, transcript_dict, exon_dict
