@@ -5,101 +5,66 @@ Copyright (C) 2012-2015 Matthew Iyer
 @author: mkiyer
 '''
 import collections
+import logging
 
+from base import Exon
+from gtf import GTF, GTFError
 
 
 class Transfrag(object):
-    __slots__ = ('chrom', 'start', 'end', 'strand', 'expr', 'exons')
+    __slots__ = ('chrom', 'start', 'end', 'strand', '_id', 'sample_id',
+                 'expr', 'is_ref', 'exons')
 
-    @staticmethod
-    def from_gtf_line(line):
-        f = GTF.Feature.from_str(line)
-        self = Transfrag()
-        self.chrom = f.seqid
-        self.start = f.start
-        self.end = f.end
-        self.strand = f.strand
-        self.expr = f.attrs[GTF.Attr.EXPRESSION]
-
-
-        pass
-
-
-
-
-    def __str__(self):
-        return ("<%s(chrom='%s', start='%d', end='%d', strand='%s', "
-                "score='%s' exons='%s', attrs='%s'" %
-                (self.__class__.__name__, self.chrom, self.start, self.end,
-                 strand_int_to_str(self.strand), str(self.score), self.exons,
-                 self.attrs))
+    def __init__(self, chrom, start, end, strand, _id, sample_id, expr,
+                 is_ref, exons=None):
+        self.chrom = chrom
+        self.start = start
+        self.end = end
+        self.strand = strand
+        self._id = _id
+        self.sample_id = sample_id
+        self.expr = expr
+        self.is_ref = is_ref
+        self.exons = [] if exons is None else exons
 
     @property
     def length(self):
         return sum((e.end - e.start) for e in self.exons)
 
-    def iterintrons(self):
-        #e1 = self.exons[0]
-        #for e2 in self.exons[1:]:
-        #    yield (e1.end,e2.start)
-        #    e1 = e2
-        e1 = self.exons[0]
-        for j in xrange(1, len(self.exons)):
-            e2 = self.exons[j]
-            yield e1.end, e2.start
-            e1 = e2
+    @staticmethod
+    def from_gtf(f):
+        '''GTF.Feature object to Transfrag'''
+        return Transfrag(f.seqid, f.start, f.end, f.strand,
+                         f.attrs[GTF.Attr.TRANSCRIPT_ID],
+                         f.attrs[GTF.Attr.SAMPLE_ID],
+                         float(f.attrs[GTF.Attr.EXPRESSION]),
+                         bool(int(f.attrs[GTF.Attr.REF])))
 
-    def introns(self):
-        return list(self.iterintrons())
+    @staticmethod
+    def parse_gtf(gtf_lines, ignore_ref):
+        '''
+        returns OrderedDict key is transcript_id value is Transfrag
+        '''
+        t_dict = collections.OrderedDict()
+        for gtf_line in gtf_lines:
+            f = GTF.Feature.from_str(gtf_line)
+            t_id = f.attrs[GTF.Attr.TRANSCRIPT_ID]
+            is_ref = bool(int(f.attrs[GTF.Attr.REF]))
 
-    def to_bed12(self):
-        block_sizes = []
-        block_starts = []
-        for e0, e1 in self.exons:
-            block_starts.append(e0 - self.tx_start)
-            block_sizes.append(e1 - e0)
-        # write
-        s = '\t'.join([self.chrom,
-                       str(self.start),
-                       str(self.end),
-                       str(self.attrs["transcript_id"]),
-                       '0',
-                       strand_int_to_str(self.strand),
-                       str(self.start),
-                       str(self.start),
-                       '0',
-                       str(len(self.exons)),
-                       ','.join(map(str,block_sizes)) + ',',
-                       ','.join(map(str,block_starts)) + ','])
-        return s
+            if is_ref and ignore_ref:
+                continue
 
-    def to_gtf_features(self, source=None, score=1000):
-        if source is None:
-            source = 'assemblyline'
-        # transcript feature
-        f = GTFFeature()
-        f.seqid = self.chrom
-        f.source = source
-        f.feature_type = 'transcript'
-        f.start = self.start
-        f.end = self.end
-        f.score = score
-        f.strand = strand_int_to_str(self.strand)
-        f.phase = '.'
-        f.attrs = self.attrs
-        features = [f]
-        # exon features
-        for i,e in enumerate(self.exons):
-            f = GTFFeature()
-            f.seqid = self.chrom
-            f.source = source
-            f.feature_type = 'exon'
-            f.start = e.start
-            f.end = e.end
-            f.score = score
-            f.strand = strand_int_to_str(self.strand)
-            f.phase = '.'
-            f.attrs = self.attrs.copy()
-            f.attrs["exon_number"] = i
-            features.append(f)
-        return features
+            if f.feature == 'transcript':
+                if t_id in t_dict:
+                    raise GTFError("Transcript '%s' duplicate detected" % t_id)
+                t = Transfrag.from_gtf(f)
+                t_dict[t_id] = t
+            elif f.feature == 'exon':
+                if t_id not in t_dict:
+                    logging.error('Feature: "%s"' % str(f))
+                    raise GTFError("Transcript '%s' exon feature appeared in "
+                                   "gtf file prior to transcript feature" %
+                                   t_id)
+                t = t_dict[t_id]
+                t.exons.append(Exon(f.start, f.end))
+        return t_dict

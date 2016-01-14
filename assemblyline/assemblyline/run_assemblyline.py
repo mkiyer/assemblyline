@@ -12,8 +12,9 @@ import json
 import pickle
 
 from assemblyline.lib2.gtf import sort_gtf, GTF
+from assemblyline.lib2.transfrag import Transfrag
 from assemblyline.lib2.aggregate import add_sample_gtf
-from assemblyline.lib2.assemble import Transfrag, Locus
+from assemblyline.lib2.assemble import Locus
 
 EXIT_ERROR = 1
 EXIT_SUCCESS = 0
@@ -393,7 +394,7 @@ class AssemblyLine(object):
             locus.write_bedgraph(raw_bgfilehd)
 
             # resolve unstranded transcripts
-            num_resolved = locus.predict_unknown_strands()
+            num_resolved = locus.impute_unknown_strands()
             if num_resolved > 0:
                 logging.debug('Locus %s:%d-%d: %d '
                               'resolved (+: %d, -: %d, .: %d)' %
@@ -428,7 +429,12 @@ def main():
         logging.info(msg)
         A.aggregate()
     #
-    A.assemble()
+    msg = 'Assembling GTF files'
+    if A.status.assemble:
+        logging.info('[SKIPPING] %s' % msg)
+    else:
+        logging.info(msg)
+        A.assemble()
 
     return 0
 

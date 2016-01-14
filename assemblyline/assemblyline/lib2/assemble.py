@@ -7,10 +7,10 @@ Copyright (C) 2012-2015 Matthew Iyer
 import collections
 import bisect
 import logging
+import networkx as nx
 
+from base import Exon
 from gtf import GTF, GTFError
-
-Exon = collections.namedtuple('Exon', ['start', 'end'])
 
 
 class AssemblyError(Exception):
@@ -67,65 +67,6 @@ def split_exons(t, boundaries):
     for exon in t.exons:
         for start, end in split_exon(exon, boundaries):
             yield start, end
-
-
-class Transfrag(object):
-    __slots__ = ('chrom', 'start', 'end', 'strand', '_id', 'sample_id',
-                 'expr', 'is_ref', 'exons')
-
-    def __init__(self, chrom, start, end, strand, _id, sample_id, expr,
-                 is_ref, exons=None):
-        self.chrom = chrom
-        self.start = start
-        self.end = end
-        self.strand = strand
-        self._id = _id
-        self.sample_id = sample_id
-        self.expr = expr
-        self.is_ref = is_ref
-        self.exons = [] if exons is None else exons
-
-    @property
-    def length(self):
-        return sum((e.end - e.start) for e in self.exons)
-
-    @staticmethod
-    def from_gtf(f):
-        '''GTF.Feature object to Transfrag'''
-        return Transfrag(f.seqid, f.start, f.end, f.strand,
-                         f.attrs[GTF.Attr.TRANSCRIPT_ID],
-                         f.attrs[GTF.Attr.SAMPLE_ID],
-                         float(f.attrs[GTF.Attr.EXPRESSION]),
-                         bool(int(f.attrs[GTF.Attr.REF])))
-
-    @staticmethod
-    def parse_gtf(gtf_lines, ignore_ref):
-        '''
-        returns OrderedDict key is transcript_id value is Transfrag
-        '''
-        t_dict = collections.OrderedDict()
-        for gtf_line in gtf_lines:
-            f = GTF.Feature.from_str(gtf_line)
-            t_id = f.attrs[GTF.Attr.TRANSCRIPT_ID]
-            is_ref = bool(int(f.attrs[GTF.Attr.REF]))
-
-            if is_ref and ignore_ref:
-                continue
-
-            if f.feature == 'transcript':
-                if t_id in t_dict:
-                    raise GTFError("Transcript '%s' duplicate detected" % t_id)
-                t = Transfrag.from_gtf(f)
-                t_dict[t_id] = t
-            elif f.feature == 'exon':
-                if t_id not in t_dict:
-                    logging.error('Feature: "%s"' % str(f))
-                    raise GTFError("Transcript '%s' exon feature appeared in "
-                                   "gtf file prior to transcript feature" %
-                                   t_id)
-                t = t_dict[t_id]
-                t.exons.append(Exon(f.start, f.end))
-        return t_dict
 
 
 class Locus(object):
@@ -185,43 +126,30 @@ class Locus(object):
             nd.samples[t.strand].remove(t.sample_id)
             nd.exprs[t.strand] -= t.expr
 
-    def _predict_strand(self, nodes):
-        total_length = sum((n[1]-n[0]) for n in nodes)
-        strand_expr = {GTF.POS_STRAND: 0.0, GTF.NEG_STRAND: 0.0}
-        strand_length = {GTF.POS_STRAND: 0, GTF.NEG_STRAND: 0}
-
+    def _check_strand_ambiguous(self, nodes):
+        '''
+        Checks list of nodes for strandedness. If strand is unambiguous,
+        then return pos or neg strand. If ambiguous, return unstranded.
+        '''
+        strands = {GTF.POS_STRAND: False,
+                   GTF.NEG_STRAND: False}
         for n in nodes:
             nd = self.node_data[n]
-            length = n[1] - n[0]
-            frac_length = float(length) / total_length
-            strand_expr['+'] += nd.exprs['+'] * frac_length
-            strand_expr['-'] += nd.exprs['-'] * frac_length
-            if nd.strands['+']:
-                strand_length['+'] += frac_length
-            if nd.strands['-']:
-                strand_length['-'] += frac_length
-
-        # if transfrag supported by stranded coverage choose strand with
-        # greatest length-normalized expression level
-        total_expr = sum(strand_expr.values())
-        if total_expr > 0:
-            if strand_expr['+'] > strand_expr['-']:
-                return '+'
-            elif strand_expr['-'] > strand_expr['+']:
-                return '-'
-        # if transfrag not supported by stranded coverage choose strand
-        # with greatest support from reference transcripts
-        total_strand_length = sum(strand_length.values())
-        if total_strand_length > 0:
-            if strand_length['+'] > strand_length['-']:
-                return '+'
-            elif strand_length['-'] > strand_length['+']:
-                return '-'
+            if nd.strands['+'] or nd.exprs['+'] > 0:
+                strands['+'] = True
+            if nd.strands['-'] or nd.exprs['-'] > 0:
+                strands['-'] = True
+        if strands['+'] and strands['-']:
+            return '.'
+        elif strands['+']:
+            return '+'
+        elif strands['-']:
+            return '-'
         return '.'
 
-    def predict_unknown_strands(self):
-        # iteratively predict strand until no new transfrags can be
-        # predicted
+    def impute_unknown_strands(self):
+        # iteratively predict strand of unstranded transfrags
+        # stop when no new transfrag strands can be imputed
         iterations = 0
         num_resolved = 0
         while(len(self.strand_transfrags['.']) > 0):
@@ -229,7 +157,7 @@ class Locus(object):
             unresolved = []
             for t in self.strand_transfrags['.']:
                 nodes = list(split_exons(t, self.boundaries))
-                new_strand = self._predict_strand(nodes)
+                new_strand = self._check_strand_ambiguous(nodes)
                 if new_strand != '.':
                     resolved.append((t, new_strand))
                     num_resolved += 1
@@ -252,6 +180,53 @@ class Locus(object):
             logging.debug('predict_unknown_strands: %d iterations' %
                           iterations)
         return num_resolved
+
+    def create_directed_graph(self, strand):
+        '''
+        build strand-specific graph
+        '''
+        def add_node(G, n, expr):
+            """add node to graph"""
+            if n not in G:
+                G.add_node(n, length=(n.end - n.start), expr=0.0)
+            nd = G.node[n]
+            nd['expr'] += expr
+
+        # initialize transcript graph
+        transfrags = self.strand_transfrags[strand]
+        boundaries = find_exon_boundaries(transfrags)
+        G = nx.DiGraph()
+
+        # add transcripts
+        for t in transfrags:
+            # split exons that cross boundaries and get the
+            # nodes that made up the transfrag
+            nodes = [n for n in split_exons(t, boundaries)]
+            if strand == '-':
+                nodes.reverse()
+            # add nodes/edges to graph
+            u = nodes[0]
+            add_node(G, u, t.expr)
+            for i in xrange(1, len(nodes)):
+                v = nodes[i]
+                add_node(G, v, t.expr)
+                G.add_edge(u, v)
+                u = v
+
+        # set graph attributes
+        G.graph['boundaries'] = boundaries
+        G.graph['strand'] = strand
+        return G
+
+    def create_directed_graphs(self):
+        for strand, transfrags in self.strand_transfrags.iteritems():
+            # create strand-specific directed graph
+            G = self.create_directed_graph(strand)
+            # collapse consecutive nodes in graph
+            H, node_chain_map = collapse_strand_specific_graph(G, introns=True)
+            # get connected components of graph which represent independent genes
+            # unconnected components are considered different genes
+            Gsubs = nx.weakly_connected_component_subgraphs(H)
 
     @staticmethod
     def open_bedgraph(file_prefix):
