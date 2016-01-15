@@ -415,6 +415,7 @@ class AssemblyLine(object):
         # self.status.write(self.results.status_file)
         # return EXIT_SUCCESS
 
+
 def main():
     # instantiate from command line
     A = AssemblyLine.create()
@@ -429,6 +430,7 @@ def main():
         logging.info(msg)
         A.aggregate()
     #
+    return 0
     msg = 'Assembling GTF files'
     if A.status.assemble:
         logging.info('[SKIPPING] %s' % msg)
