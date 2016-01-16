@@ -7,6 +7,7 @@ Copyright (C) 2012-2015 Matthew Iyer
 import collections
 import operator
 
+from base import AssemblyLineError
 from stat import scoreatpercentile
 from gtf import GTF
 
@@ -36,31 +37,39 @@ def _read_transfrags(sample, gtf_expr_attr, is_ref=False):
     '''
     t_dict = collections.OrderedDict()
     t_id_map = {}
+    t_expr_map = {}
     cur_t_id = 1
     expr_tot = 0.0
     for f in GTF.parse(open(sample.gtf_file)):
-        if f.feature != 'exon':
-            continue
-        # rename transcript id
         t_id = f.attrs[GTF.Attr.TRANSCRIPT_ID]
-        expr = f.attrs.get(gtf_expr_attr, '0')
-        if t_id not in t_id_map:
-            new_t_id = "%s.T%d" % (sample._id, cur_t_id)
-            t_id_map[t_id] = new_t_id
-            cur_t_id += 1
-            expr_tot += float(expr)  # update total expression
-        else:
+        if f.feature == 'transcript':
+            # save expression
+            if is_ref:
+                expr = '0.0'
+            else:
+                expr = f.attrs[gtf_expr_attr]
+                t_expr_map[t_id] = expr
+            # rename transcript id
+            if t_id not in t_id_map:
+                new_t_id = "%s.T%d" % (sample._id, cur_t_id)
+                t_id_map[t_id] = new_t_id
+                cur_t_id += 1
+                expr_tot += float(expr)  # update total expression
+                t_dict[new_t_id] = []    # init t_dict
+        elif f.feature == 'exon':
+            # lookup expression
+            if is_ref:
+                expr = 0.0
+            else:
+                expr = float(t_expr_map[t_id])
             new_t_id = t_id_map[t_id]
-        # update feature attributes
-        attrs = ((GTF.Attr.TRANSCRIPT_ID, new_t_id),
-                 (GTF.Attr.SAMPLE_ID, sample._id),
-                 (GTF.Attr.REF, str(int(is_ref))),
-                 (gtf_expr_attr, expr))
-        f.attrs = collections.OrderedDict(attrs)
-        # store feature
-        if new_t_id not in t_dict:
-            t_dict[new_t_id] = []
-        t_dict[new_t_id].append(f)
+            # store exon feature
+            attrs = ((GTF.Attr.TRANSCRIPT_ID, new_t_id),
+                     (GTF.Attr.SAMPLE_ID, sample._id),
+                     (GTF.Attr.REF, str(int(is_ref))),
+                     (gtf_expr_attr, expr))
+            f.attrs = collections.OrderedDict(attrs)
+            t_dict[new_t_id].append(f)
     return t_dict, expr_tot
 
 

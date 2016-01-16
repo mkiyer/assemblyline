@@ -10,6 +10,10 @@ import collections
 Exon = collections.namedtuple('Exon', ['start', 'end'])
 
 
+class AssemblyLineError:
+    pass
+
+
 class Strand:
     POS = 0
     NEG = 1

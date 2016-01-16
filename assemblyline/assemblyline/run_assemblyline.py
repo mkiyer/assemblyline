@@ -11,6 +11,7 @@ import logging
 import json
 import pickle
 
+from assemblyline.lib2.base import AssemblyLineError
 from assemblyline.lib2.gtf import sort_gtf, GTF
 from assemblyline.lib2.transfrag import Transfrag
 from assemblyline.lib2.aggregate import add_sample_gtf
@@ -18,10 +19,6 @@ from assemblyline.lib2.assemble import Locus
 
 EXIT_ERROR = 1
 EXIT_SUCCESS = 0
-
-
-class AssemblyLineError(Exception):
-    pass
 
 
 class Sample(object):
