@@ -20,6 +20,9 @@ def main():
 
     with open(args.gtf_file) as fileh:
         for f in GTF.parse(fileh):
+            if args.gtf_attr not in f.attrs:
+                logging.warning("Skipped line: %s" % str(f))
+                continue
             val = f.attrs[args.gtf_attr]
             if val in values:
                 print str(f)
