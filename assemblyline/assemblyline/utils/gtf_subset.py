@@ -20,6 +20,8 @@ def main():
 
     with open(args.gtf_file) as fileh:
         for f in GTF.parse(fileh):
+            if f.feature_type not in ('transcript', 'exon'):
+                continue
             if args.gtf_attr not in f.attrs:
                 logging.warning("Skipped line: %s" % str(f))
                 continue
