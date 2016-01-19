@@ -123,7 +123,8 @@ class GTF:
         def window_overlap(a, b):
             if a[0] != b[0]:
                 return False
-            return (a[1] <= b[2]) and (b[1] <= a[2])
+            # return (a[1] <= b[2]) and (b[1] <= a[2])
+            return (a[1] < b[2]) and (b[1] < a[2])
 
         def get_intervals(line_iter):
             for line in line_iter:

@@ -1,0 +1,13 @@
+chr1	test	transcript	1	500	0	+	.	transcript_id "A"
+chr1	test	exon	1	100	0	+	.	transcript_id "A"
+chr1	test	exon	201	300	0	+	.	transcript_id "A"
+chr1	test	exon	401	500	0	+	.	transcript_id "A"
+
+chr1	test	transcript	51	500	0	+	.	transcript_id "B"
+chr1	test	exon	51	100	0	+	.	transcript_id "B"
+chr1	test	exon	251	300	0	+	.	transcript_id "B"
+chr1	test	exon	401	500	0	+	.	transcript_id "B"
+
+chr1	test	transcript	151	450	0	+	.	transcript_id "C"
+chr1	test	exon	151	300	0	+	.	transcript_id "C"
+chr1	test	exon	401	450	0	+	.	transcript_id "C"

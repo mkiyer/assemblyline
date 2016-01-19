@@ -7,7 +7,6 @@ Copyright (C) 2012-2015 Matthew Iyer
 import collections
 import operator
 
-from base import AssemblyLineError
 from stat import scoreatpercentile
 from gtf import GTF
 
@@ -39,22 +38,17 @@ def _read_transfrags(sample, gtf_expr_attr, is_ref=False):
     t_id_map = {}
     t_expr_map = {}
     cur_t_id = 1
-    expr_tot = 0.0
     for f in GTF.parse(open(sample.gtf_file)):
         t_id = f.attrs[GTF.Attr.TRANSCRIPT_ID]
         if f.feature == 'transcript':
             # save expression
-            if is_ref:
-                expr = '0.0'
-            else:
-                expr = f.attrs[gtf_expr_attr]
-                t_expr_map[t_id] = expr
+            expr = f.attrs[gtf_expr_attr]
+            t_expr_map[t_id] = expr
             # rename transcript id
             if t_id not in t_id_map:
                 new_t_id = "%s.T%d" % (sample._id, cur_t_id)
                 t_id_map[t_id] = new_t_id
                 cur_t_id += 1
-                expr_tot += float(expr)  # update total expression
                 t_dict[new_t_id] = []    # init t_dict
         elif f.feature == 'exon':
             # lookup expression
@@ -70,7 +64,7 @@ def _read_transfrags(sample, gtf_expr_attr, is_ref=False):
                      (gtf_expr_attr, expr))
             f.attrs = collections.OrderedDict(attrs)
             t_dict[new_t_id].append(f)
-    return t_dict, expr_tot
+    return t_dict
 
 
 def add_sample_gtf(sample, gtf_expr_attr, output_fileh, stats_fileh,
@@ -80,7 +74,7 @@ def add_sample_gtf(sample, gtf_expr_attr, output_fileh, stats_fileh,
     Normalizes expression by total filtered expression
     '''
     # read gtf file into dict of transcripts
-    t_dict, expr_tot = _read_transfrags(sample, gtf_expr_attr, is_ref)
+    t_dict = _read_transfrags(sample, gtf_expr_attr, is_ref)
 
     # normalize expression by total
     exprs = []
@@ -88,18 +82,16 @@ def add_sample_gtf(sample, gtf_expr_attr, output_fileh, stats_fileh,
     for t_id, features in t_dict.iteritems():
         # sort features (exons) by start position
         features.sort(key=operator.attrgetter('start'))
-
-        expr = float(features[0].attrs[gtf_expr_attr])
-        expr_norm = 0.0 if is_ref else expr * (1.0e6 / expr_tot)
-        exprs.append(expr_norm)
+        expr = 0.0 if is_ref else float(features[0].attrs[gtf_expr_attr])
+        exprs.append(expr)
         lengths.append(sum((f.end - f.start) for f in features))
         # write transcript
         feature = _make_transcript_feature(features)
-        feature.attrs[GTF.Attr.EXPRESSION] = expr_norm
+        feature.attrs[GTF.Attr.EXPRESSION] = expr
         print >>output_fileh, str(feature)
         # write exons
         for i, feature in enumerate(features):
-            feature.attrs[GTF.Attr.EXPRESSION] = expr_norm
+            feature.attrs[GTF.Attr.EXPRESSION] = expr
             feature.attrs['exon_number'] = '%d' % (i + 1)
             print >>output_fileh, str(feature)
 
@@ -109,6 +101,6 @@ def add_sample_gtf(sample, gtf_expr_attr, output_fileh, stats_fileh,
     length_quantiles = (int(round(scoreatpercentile(lengths, q)))
                         for q in range(0, 101))
     length_quantiles = ','.join(map(str, length_quantiles))
-    fields = [sample._id, len(t_dict), expr_tot, expr_quantiles,
+    fields = [sample._id, len(t_dict), expr_quantiles,
               length_quantiles]
     print >>stats_fileh, '\t'.join(map(str, fields))

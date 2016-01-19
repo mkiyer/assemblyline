@@ -9,12 +9,59 @@ import bisect
 import logging
 import networkx as nx
 
-from base import Exon
-from gtf import GTF, GTFError
+from gtf import GTF
 
 
 class AssemblyError(Exception):
     pass
+
+
+def find_splice_sites(transfrags):
+    '''
+    input: a list of transfrags
+
+    output: sorted list of exon boundaries
+    '''
+    splice_sites = set()
+    # first add introns to the graph and keep track of
+    # all intron boundaries
+    for t in transfrags:
+        # add intron boundaries
+        for start, end in t.iterintrons():
+            splice_sites.add(start)
+            splice_sites.add(end)
+    # sort the intron boundary positions
+    return sorted(splice_sites)
+
+
+def find_transfrag_nodes(t, splice_sites):
+    '''
+    assumes transfrag exons are sorted by genomic position
+    '''
+    if t.start == t.end:
+        return
+
+    # subset splice sites list to boundaries of transfrag
+    t_start_ind = bisect.bisect_right(splice_sites, t.start)
+    t_end_ind = bisect.bisect_left(splice_sites, t.end)
+    if t_start_ind == t_end_ind:
+        yield t.start, t.end
+    splice_sites = splice_sites[t_start_ind:t_end_ind]
+
+    for exon in t.exons:
+        # find the indexes into the splice sites list that border the exon.
+        start_ind = bisect.bisect_right(splice_sites, exon.start)
+        end_ind = bisect.bisect_left(splice_sites, exon.end)
+        if start_ind == end_ind:
+            yield exon.start, exon.end
+        else:
+            yield exon.start, splice_sites[start_ind]
+            # all the splice sites in between the exon borders must overlap
+            for j in xrange(start_ind, end_ind-1):
+                yield splice_sites[j], splice_sites[j+1]
+            yield splice_sites[end_ind-1], exon.end
+        # subset splice sites as we move along the transcript
+        splice_sites = splice_sites[end_ind-1:]
 
 
 def find_exon_boundaries(transcripts):
@@ -91,6 +138,21 @@ class Locus(object):
         self.node_data = None
         self.strand_transfrags = None
 
+    def _add_transfrag(self, t):
+        for n in split_exons(t, self.boundaries):
+            nd = self.node_data[n]
+            nd.strands[t.strand] = True
+            if not t.is_ref:
+                nd.exprs[t.strand] += t.expr
+                nd.samples[t.strand].add(t.sample_id)
+
+    def _remove_transfrag(self, t):
+        for n in split_exons(t, self.boundaries):
+            nd = self.node_data[n]
+            nd.strands[t.strand] = False
+            nd.samples[t.strand].remove(t.sample_id)
+            nd.exprs[t.strand] -= t.expr
+
     @staticmethod
     def create(transfrags):
         self = Locus()
@@ -110,21 +172,6 @@ class Locus(object):
             self._add_transfrag(t)
             self.strand_transfrags[t.strand].append(t)
         return self
-
-    def _add_transfrag(self, t):
-        for n in split_exons(t, self.boundaries):
-            nd = self.node_data[n]
-            nd.strands[t.strand] = True
-            if not t.is_ref:
-                nd.exprs[t.strand] += t.expr
-                nd.samples[t.strand].add(t.sample_id)
-
-    def _remove_transfrag(self, t):
-        for n in split_exons(t, self.boundaries):
-            nd = self.node_data[n]
-            nd.strands[t.strand] = False
-            nd.samples[t.strand].remove(t.sample_id)
-            nd.exprs[t.strand] -= t.expr
 
     def _check_strand_ambiguous(self, nodes):
         '''

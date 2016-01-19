@@ -7,20 +7,18 @@ Copyright (C) 2012-2015 Matthew Iyer
 import collections
 import logging
 
-from base import Exon
+from base import Exon, Strand
 from gtf import GTF, GTFError
 
 
 class Transfrag(object):
-    __slots__ = ('chrom', 'start', 'end', 'strand', '_id', 'sample_id',
-                 'expr', 'is_ref', 'exons')
+    __slots__ = ('chrom', 'strand', 'exons', '_id', 'sample_id', 'expr',
+                 'is_ref')
 
-    def __init__(self, chrom, start, end, strand, _id, sample_id, expr,
-                 is_ref, exons=None):
+    def __init__(self, chrom=None, strand=None, _id=None, sample_id=None,
+                 expr=0.0, is_ref=False, exons=None):
         self.chrom = chrom
-        self.start = start
-        self.end = end
-        self.strand = strand
+        self.strand = Strand.NA if strand is None else strand
         self._id = _id
         self.sample_id = sample_id
         self.expr = expr
@@ -31,17 +29,38 @@ class Transfrag(object):
     def length(self):
         return sum((e.end - e.start) for e in self.exons)
 
+    @property
+    def start(self):
+        return self.exons[0].start
+
+    @property
+    def end(self):
+        return self.exons[-1].end
+
+    def iterintrons(self):
+        #e1 = self.exons[0]
+        #for e2 in self.exons[1:]:
+        #    yield (e1.end,e2.start)
+        #    e1 = e2
+        e1 = self.exons[0]
+        for j in xrange(1, len(self.exons)):
+            e2 = self.exons[j]
+            yield e1.end, e2.start
+            e1 = e2
+
     @staticmethod
     def from_gtf(f):
         '''GTF.Feature object to Transfrag'''
-        return Transfrag(f.seqid, f.start, f.end, f.strand,
-                         f.attrs[GTF.Attr.TRANSCRIPT_ID],
-                         f.attrs[GTF.Attr.SAMPLE_ID],
-                         float(f.attrs[GTF.Attr.EXPRESSION]),
-                         bool(int(f.attrs[GTF.Attr.REF])))
+        return Transfrag(chrom=f.seqid,
+                         strand=Strand.from_gtf(f.strand),
+                         _id=f.attrs[GTF.Attr.TRANSCRIPT_ID],
+                         sample_id=f.attrs.get(GTF.Attr.SAMPLE_ID, None),
+                         expr=float(f.attrs.get(GTF.Attr.EXPRESSION, 0.0)),
+                         is_ref=bool(int(f.attrs.get(GTF.Attr.REF, '0'))),
+                         exons=None)
 
     @staticmethod
-    def parse_gtf(gtf_lines, ignore_ref):
+    def parse_gtf(gtf_lines, ignore_ref=True):
         '''
         returns OrderedDict key is transcript_id value is Transfrag
         '''
@@ -49,7 +68,7 @@ class Transfrag(object):
         for gtf_line in gtf_lines:
             f = GTF.Feature.from_str(gtf_line)
             t_id = f.attrs[GTF.Attr.TRANSCRIPT_ID]
-            is_ref = bool(int(f.attrs[GTF.Attr.REF]))
+            is_ref = bool(int(f.attrs.get(GTF.Attr.REF, '0')))
 
             if is_ref and ignore_ref:
                 continue
